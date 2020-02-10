@@ -23,14 +23,17 @@ def is_built_in(args):
         ret = False
     return ret
 
-def split_proc(in_args):
+def exec_proc(in_args):
     # パイプを分割する処理
+    # ls > a.txt > b.txt >> c.txt などを許容しない
+    # ls | cat < a.txt を許容しない
     elements = []
     skippable = False
     redir_in = ''
-    redir_out = []
-    redir_out_add = []
-    counts = 0
+    redir_out = ''
+    redir_out_add = ''
+    pfd = []
+    pipes = 0
     
     for i, el in enumerate(in_args):
         if skippable == True:
@@ -42,40 +45,105 @@ def split_proc(in_args):
                     redir_in = in_args[i+1]
                     # sys.stderr.write('redir_in: ' + redir_in + '\n')
                 elif el == '>':
-                    redir_out.append(in_args[i+1])
+                    redir_out = in_args[i+1]
                     # sys.stderr.write('redir_out: ' + redir_out + '\n')
                 else:
-                    redir_out_add.append(in_args[i+1])
+                    redir_out_add = in_args[i+1]
                     # sys.stderr.write('redir_out_add: ' + redir_out_add + '\n')
             else:
                 sys.stderr.write('-pysh: syntax error: ' + in_args[i] + '\n')
+                
         elif el == '|':
-            exec_sh(elements)
+            pfd[pipes] = os.pipe()
+            child_pid = os.fork()
+            if child_pid == 0:
+                with open(pfd[pipes][0], 'w') as out_file:
+                    pfd[pipes][0] = out_file.fileno()
+                    os.dup2(pfd[pipes][0], 1)
+                with open(pfd[pipes][1], 'r') as in_file:
+                    pfd[pipes][1] = in_file.fileno()
+                    os.dup2(pfd[pipes][1], 0)
+                if redir_in != '':
+                    with open(redir_in, 'r') as in_file:
+                        fd = in_file.fileno()
+                        os.dup2(fd, 0)
+                if redir_out != '':
+                    with open(redir_out, 'w') as out_file:
+                        fd = out_file.fileno()
+                        os.dup2(fd, 1)
+                if redir_out_add != '':
+                    with open(redir_out_add, 'a') as out_file:
+                        fd = out_file.fileno()
+                        os.dup2(fd, 1)
+                try:
+                    os.execvp(elements[0], elements)
+                    elements = []
+                    redir_in = ''
+                    redir_out = ''
+                    redir_out_add = ''
+                except:
+                    sys.stderr.write('-pysh: command not found: ' + args[0] + '\n')
+            else:
+                os.waitpid(child_pid, 0)
+            
+            pipes += 1
+
+            
             # sys.stderr.write('element' + str(counts) + ' : '  + str(in_piped[counts]) + '\n\n')
             # counts += 1
-            elements = []
-            redir_in = ''
-            redir_out = []
-            redir_out_add = []
+        #     child_pid = os.fork()
+        #     if child_pid == 0:
+        #         if redir_in != '':
+        #             with open(redir_in, 'r') as in_file:
+        #                 fd = in_file.fileno()
+        #                 os.dup2(fd, 0)
+        #         if redir_out != '':
+        #             with open(redir_out, 'w') as out_file:
+        #                 fd = out_file.fileno()
+        #                 os.dup2(fd, 1)
+        #         if redir_out_add != '':
+        #             with open(redir_out_add, 'a') as out_file:
+        #                 fd = out_file.fileno()
+        #                 os.dup2(fd, 1)
+        #         try:
+        #             os.execvp(args[0], args)
+        #             elements = []
+        #             redir_in = ''
+        #             redir_out = ''
+        #             redir_out_add = ''
+        #         except:
+        #             sys.stderr.write('-pysh: command not found: ' + args[0] + '\n')
+        #     else:
+        #         os.waitpid(child_pid, 0)    
+
         else:
             elements.append(el)
-            
+        
     if elements != []:
-        exec_sh(elements)
-        # sys.stderr.write('element' + str(counts) + ' : '  + str(in_piped[counts]) + '\n\n')
-
-def exec_sh(args):
-    # parent_pid =  os.getpid()
-    child_pid = os.fork()
-    
-    # os.fork()は子プロセスのときは0, それ以外はchild_pidを返す
-    if child_pid == 0:
-        try:
-            os.execvp(args[0], args)
-        except:
-            sys.stderr.write('-pysh: command not found: ' + args[0] + '\n')
-    else:
-        os.waitpid(child_pid, 0)
+        child_pid = os.fork()
+        if child_pid == 0:
+            if redir_in != '':
+                with open(redir_in, 'r') as in_file:
+                    fd = in_file.fileno()
+                    os.dup2(fd, 0)
+            if redir_out != '':
+                with open(redir_out, 'w') as out_file:
+                    fd = out_file.fileno()
+                    os.dup2(fd, 1)
+            if redir_out_add != '':
+                with open(redir_out_add, 'a') as out_file:
+                    fd = out_file.fileno()
+                    os.dup2(fd, 1)
+            try:
+                os.execvp(elements[0], elements)
+                elements = []
+                redir_in = ''
+                redir_out = ''
+                redir_out_add = ''
+            except:
+                sys.stderr.write('-pysh: command not found: ' + args[0] + '\n')
+        else:
+            os.waitpid(child_pid, 0)
 
 if __name__ == "__main__":
     while True:
@@ -86,4 +154,5 @@ if __name__ == "__main__":
         if is_built_in(args):
             continue
 
-        exec_sh(args)
+        # parent_pid =  os.getpid()
+        exec_proc(args)
