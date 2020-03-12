@@ -1,5 +1,6 @@
 import os
 import sys
+import signal
 
 def cd(args):
     # cdコマンドの実装
@@ -34,6 +35,7 @@ def exec_proc(in_args):
     redir_out_add = ''
     pfd = []
     pipes = 0
+    bg_flag = 0
     
     for i, el in enumerate(in_args):
         if skippable == True:
@@ -88,34 +90,6 @@ def exec_proc(in_args):
             
             pipes += 1
 
-            
-            # sys.stderr.write('element' + str(counts) + ' : '  + str(in_piped[counts]) + '\n\n')
-            # counts += 1
-        #     child_pid = os.fork()
-        #     if child_pid == 0:
-        #         if redir_in != '':
-        #             with open(redir_in, 'r') as in_file:
-        #                 fd = in_file.fileno()
-        #                 os.dup2(fd, 0)
-        #         if redir_out != '':
-        #             with open(redir_out, 'w') as out_file:
-        #                 fd = out_file.fileno()
-        #                 os.dup2(fd, 1)
-        #         if redir_out_add != '':
-        #             with open(redir_out_add, 'a') as out_file:
-        #                 fd = out_file.fileno()
-        #                 os.dup2(fd, 1)
-        #         try:
-        #             os.execvp(args[0], args)
-        #             elements = []
-        #             redir_in = ''
-        #             redir_out = ''
-        #             redir_out_add = ''
-        #         except:
-        #             sys.stderr.write('-pysh: command not found: ' + args[0] + '\n')
-        #     else:
-        #         os.waitpid(child_pid, 0)    
-
         else:
             elements.append(el)
         
@@ -146,6 +120,9 @@ def exec_proc(in_args):
             os.waitpid(child_pid, 0)
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    signal.signal(signal.SIGTSTP, signal.SIG_IGN)
+    
     while True:
         sys.stderr.write('mysh$ ')
         cmd = input()
